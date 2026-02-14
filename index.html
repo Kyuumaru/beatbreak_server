@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>SUS → TXT / BBS Converter</title>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+button { padding: 6px 14px; }
+pre { margin-top: 10px; background: #f5f5f5; padding: 10px; }
+</style>
+</head>
+<body>
+
+<h3>.sus → 独自譜面(txt / bbs)</h3>
+<input type="file" id="fileInput" accept=".sus">
+<button onclick="convert()">変換</button>
+
+<pre id="out"></pre>
+
+<script>
+function convert() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => parseSus(reader.result);
+  reader.readAsText(file);
+}
+
+function parseSus(text) {
+  const lines = text.split(/\r?\n/);
+  const events = {};
+
+  const laneMap = { "2":0, "4":1, "6":2, "8":3, "a":4, "c":5 };
+
+  for (const line of lines) {
+    if (!/^#[0-9a-fA-F]{5,6}:/.test(line)) continue;
+
+    const [header, data] = line.split(":");
+    const measure = parseInt(header.slice(1, 4), 10);
+
+    const laneKey = header[5];     // a / c は小文字で来る前提
+    const opt = header[6] || "0";
+    if (opt !== "0") continue;
+    if (!(laneKey in laneMap)) continue;
+
+    const lane = laneMap[laneKey];
+    const chunks = data.match(/.{2}/g) || [];
+    const div = chunks.length;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const c = chunks[i];
+      let note = null;
+
+      if (c === "12") {
+        note = (chunks[i + 1] === "52") ? "3" : "1";
+      }
+      else if (c === "22") note = "2";
+      else if (c === "52") note = "5";
+      else if (c === "62") note = "4";
+      else continue;
+
+      const beat = Number(
+        (measure * 384 + (384 / div) * i).toFixed(6)
+      );
+
+      if (!events[beat]) events[beat] = Array(6).fill("/");
+      events[beat][lane] = note;
+    }
+  }
+
+  const output = "[" + Object.keys(events)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map(b => `"${b}:${events[b].join("")}"`)
+    .join(",") + "]";
+
+  document.getElementById("out").textContent = output;
+
+  download(output, "chart.txt");
+  download(output, "chart.bbs");
+}
+
+function download(text, filename) {
+  const blob = new Blob([text], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+</script>
+
+</body>
+</html>
